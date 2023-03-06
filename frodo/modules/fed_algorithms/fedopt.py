@@ -3,65 +3,17 @@ import numpy as np
 
 import torch
 import torch.nn as nn
-from torch.optim import Optimizer
 
-from utils import Averager
-from utils import count_acc
-from utils import append_to_logs
-from utils import format_logs
+from utilities import Averager
+from utilities import count_acc
+from utilities import append_to_logs
+from utilities import format_logs
 
 from tools import construct_dataloaders
+from tools import construct_optimizer
 
 
-# code link:
-# https://github.com/CharlieDinh/pFedMe
-
-
-class MySGD(Optimizer):
-    def __init__(self, params, lr, mu, weight_decay):
-        defaults = dict(lr=lr, mu=mu, weight_decay=weight_decay)
-        super(MySGD, self).__init__(params, defaults)
-
-    @torch.no_grad()
-    def step(self, closure=None, beta=0):
-        loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure
-
-        for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                param_state = self.state[p]
-                d_p = p.grad.data
-
-                if group["weight_decay"] != 0.0:
-                    d_p = d_p + group["weight_decay"] * p.data
-                    # d_p = d_p.add(p, alpha=group["weight_decay"])
-
-                if group["mu"] != 0.0:
-                    if "momentum_buffer" not in param_state:
-                        buf = torch.clone(d_p).detach()
-                        param_state["momentum_buffer"] = buf
-                    else:
-                        buf = param_state["momentum_buffer"]
-                        buf = group["mu"] * buf + d_p
-                        # buf.mul_(group["mu"]).add_(d_p)
-
-                        # update momentum buffer important !!!
-                        param_state["momentum_buffer"] = buf
-                    d_p = buf
-
-                if (beta != 0):
-                    p.data = p.data - beta * d_p
-                else:
-                    p.data = p.data - group['lr'] * d_p
-        return loss
-
-
-class PerFedAvg():
+class FedOpt():
     def __init__(
         self, csets, gset, model, args
     ):
@@ -78,12 +30,39 @@ class PerFedAvg():
                 self.clients, self.csets, self.gset, self.args
             )
 
+        self.global_optimizer = self._initialize_global_optimizer(
+            model=self.model, args=self.args
+        )
+
         self.logs = {
             "ROUNDS": [],
             "LOSSES": [],
             "GLO_TACCS": [],
             "LOCAL_TACCS": [],
         }
+
+    def _initialize_global_optimizer(self, model, args):
+        # global optimizer
+        if args.glo_optimizer == "SGD":
+            # similar as FedAvgM
+            global_optimizer = torch.optim.SGD(
+                self.model.parameters(),
+                lr=args.glo_lr,
+                momentum=0.9,
+                weight_decay=0.0
+            )
+        elif args.glo_optimizer == "Adam":
+            global_optimizer = torch.optim.Adam(
+                model.parameters(),
+                lr=args.glo_lr,
+                betas=(0.9, 0.999),
+                weight_decay=0.0
+            )
+        else:
+            raise ValueError("No such glo_optimizer: {}".format(
+                args.glo_optimizer
+            ))
+        return global_optimizer
 
     def train(self):
         # Training
@@ -93,19 +72,19 @@ class PerFedAvg():
                 self.clients, n_sam_clients, replace=False
             )
 
-            local_models = {}
+            local_deltas = {}
 
             avg_loss = Averager()
             all_per_accs = []
             for client in sam_clients:
-                local_model, per_accs, loss = self.update_local(
+                local_delta, per_accs, loss = self.update_local(
                     r=r,
                     model=copy.deepcopy(self.model),
                     train_loader=self.train_loaders[client],
                     test_loader=self.test_loaders[client],
                 )
 
-                local_models[client] = copy.deepcopy(local_model)
+                local_deltas[client] = copy.deepcopy(local_delta)
                 avg_loss.add(loss)
                 all_per_accs.append(per_accs)
 
@@ -115,7 +94,7 @@ class PerFedAvg():
             self.update_global(
                 r=r,
                 global_model=self.model,
-                local_models=local_models,
+                local_models=local_deltas,
             )
 
             if r % self.args.test_round == 0:
@@ -136,14 +115,8 @@ class PerFedAvg():
                 ))
 
     def update_local(self, r, model, train_loader, test_loader):
-        # lr = min(r / 10.0, 1.0) * self.args.lr
-        lr = self.args.lr
-
-        optimizer = MySGD(
-            params=model.parameters(),
-            lr=lr,
-            mu=self.args.momentum,
-            weight_decay=self.args.weight_decay
+        optimizer = construct_optimizer(
+            model, self.args.lr, self.args
         )
 
         if self.args.local_steps is not None:
@@ -185,39 +158,17 @@ class PerFedAvg():
             if self.args.cuda:
                 batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
 
-            temp_params = copy.deepcopy(list(model.parameters()))
+            hs, logits = model(batch_x)
 
-            # step 1
-            optimizer.zero_grad()
-            _, logits = model(batch_x)
             criterion = nn.CrossEntropyLoss()
             loss = criterion(logits, batch_y)
+
+            optimizer.zero_grad()
             loss.backward()
+            nn.utils.clip_grad_norm_(
+                model.parameters(), self.args.max_grad_norm
+            )
             optimizer.step()
-
-            avg_loss.add(loss.item())
-
-            # step 2
-            try:
-                batch_x, batch_y = loader_iter.next()
-            except Exception:
-                loader_iter = iter(train_loader)
-                batch_x, batch_y = loader_iter.next()
-
-            if self.args.cuda:
-                batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
-
-            optimizer.zero_grad()
-            _, logits = model(batch_x)
-            criterion = nn.CrossEntropyLoss()
-            loss = criterion(logits, batch_y)
-            loss.backward()
-
-            # restore the model parameters to the one before first update
-            for p1, p0 in zip(model.parameters(), temp_params):
-                p1.data = p0.data.clone()
-
-            optimizer.step(beta=self.args.meta_lr)
 
             avg_loss.add(loss.item())
 
@@ -240,7 +191,33 @@ class PerFedAvg():
                 mean_value = (1.0 * vs).mean(dim=0).long()
             mean_state_dict[name] = mean_value
 
-        global_model.load_state_dict(mean_state_dict, strict=False)
+        # zero_grad
+        self.global_optimizer.zero_grad()
+        global_optimizer_state = self.global_optimizer.state_dict()
+
+        # new_model
+        new_model = copy.deepcopy(global_model)
+        new_model.load_state_dict(mean_state_dict, strict=True)
+
+        # set global_model gradient
+        with torch.no_grad():
+            for param, new_param in zip(
+                global_model.parameters(), new_model.parameters()
+            ):
+                param.grad = param.data - new_param.data
+
+        # replace some non-parameters's state dict
+        state_dict = global_model.state_dict()
+        for name in dict(global_model.named_parameters()).keys():
+            mean_state_dict[name] = state_dict[name]
+        global_model.load_state_dict(mean_state_dict, strict=True)
+
+        # optimization
+        self.global_optimizer = self._initialize_global_optimizer(
+            global_model, self.args
+        )
+        self.global_optimizer.load_state_dict(global_optimizer_state)
+        self.global_optimizer.step()
 
     def test(self, model, loader):
         model.eval()
@@ -266,4 +243,3 @@ class PerFedAvg():
         all_logs_str.extend(logs_str)
 
         append_to_logs(fpath, all_logs_str)
-

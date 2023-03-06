@@ -3,17 +3,20 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from utils import Averager
-from utils import count_acc
-from utils import append_to_logs
-from utils import format_logs
+from utilities import Averager
+from utilities import count_acc
+from utilities import append_to_logs
+from utilities import format_logs
 
 from tools import construct_dataloaders
 from tools import construct_optimizer
 
+from tools import mmd_rbf_noaccelerate
 
-class FedOpt():
+
+class FedReg():
     def __init__(
         self, csets, gset, model, args
     ):
@@ -30,39 +33,12 @@ class FedOpt():
                 self.clients, self.csets, self.gset, self.args
             )
 
-        self.global_optimizer = self._initialize_global_optimizer(
-            model=self.model, args=self.args
-        )
-
         self.logs = {
             "ROUNDS": [],
             "LOSSES": [],
             "GLO_TACCS": [],
             "LOCAL_TACCS": [],
         }
-
-    def _initialize_global_optimizer(self, model, args):
-        # global optimizer
-        if args.glo_optimizer == "SGD":
-            # similar as FedAvgM
-            global_optimizer = torch.optim.SGD(
-                self.model.parameters(),
-                lr=args.glo_lr,
-                momentum=0.9,
-                weight_decay=0.0
-            )
-        elif args.glo_optimizer == "Adam":
-            global_optimizer = torch.optim.Adam(
-                model.parameters(),
-                lr=args.glo_lr,
-                betas=(0.9, 0.999),
-                weight_decay=0.0
-            )
-        else:
-            raise ValueError("No such glo_optimizer: {}".format(
-                args.glo_optimizer
-            ))
-        return global_optimizer
 
     def train(self):
         # Training
@@ -72,19 +48,19 @@ class FedOpt():
                 self.clients, n_sam_clients, replace=False
             )
 
-            local_deltas = {}
+            local_models = {}
 
             avg_loss = Averager()
             all_per_accs = []
             for client in sam_clients:
-                local_delta, per_accs, loss = self.update_local(
+                local_model, per_accs, loss = self.update_local(
                     r=r,
                     model=copy.deepcopy(self.model),
                     train_loader=self.train_loaders[client],
                     test_loader=self.test_loaders[client],
                 )
 
-                local_deltas[client] = copy.deepcopy(local_delta)
+                local_models[client] = copy.deepcopy(local_model)
                 avg_loss.add(loss)
                 all_per_accs.append(per_accs)
 
@@ -94,7 +70,7 @@ class FedOpt():
             self.update_global(
                 r=r,
                 global_model=self.model,
-                local_models=local_deltas,
+                local_models=local_models,
             )
 
             if r % self.args.test_round == 0:
@@ -115,6 +91,10 @@ class FedOpt():
                 ))
 
     def update_local(self, r, model, train_loader, test_loader):
+        # copy as global model
+        global_model = copy.deepcopy(model)
+        global_model.eval()
+
         optimizer = construct_optimizer(
             model, self.args.lr, self.args
         )
@@ -161,7 +141,30 @@ class FedOpt():
             hs, logits = model(batch_x)
 
             criterion = nn.CrossEntropyLoss()
-            loss = criterion(logits, batch_y)
+            ce_loss = criterion(logits, batch_y)
+
+            # reg loss
+            if self.args.reg_way == "fedl2":
+                ghs, _ = global_model(batch_x)
+                reg_loss = F.smooth_l1_loss(hs, ghs.detach())
+            elif self.args.reg_way == "fedmmd":
+                ghs, _ = global_model(batch_x)
+                reg_loss = mmd_rbf_noaccelerate(hs, ghs.detach())
+            elif self.args.reg_way == "fedprox":
+                reg_loss = 0.0
+                cnt = 0
+                for name, param in model.named_parameters():
+                    prox_term = F.smooth_l1_loss(
+                        param, global_model.state_dict()[name]
+                    )
+                    reg_loss += prox_term
+                    cnt += 1
+                reg_loss = reg_loss / cnt
+            elif self.args.reg_way == "feddis":
+                _, g_logits = global_model(batch_x)
+                reg_loss = self.knowledge_transfer_loss(logits, g_logits)
+
+            loss = ce_loss + self.args.reg_lamb * reg_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -191,33 +194,7 @@ class FedOpt():
                 mean_value = (1.0 * vs).mean(dim=0).long()
             mean_state_dict[name] = mean_value
 
-        # zero_grad
-        self.global_optimizer.zero_grad()
-        global_optimizer_state = self.global_optimizer.state_dict()
-
-        # new_model
-        new_model = copy.deepcopy(global_model)
-        new_model.load_state_dict(mean_state_dict, strict=True)
-
-        # set global_model gradient
-        with torch.no_grad():
-            for param, new_param in zip(
-                global_model.parameters(), new_model.parameters()
-            ):
-                param.grad = param.data - new_param.data
-
-        # replace some non-parameters's state dict
-        state_dict = global_model.state_dict()
-        for name in dict(global_model.named_parameters()).keys():
-            mean_state_dict[name] = state_dict[name]
-        global_model.load_state_dict(mean_state_dict, strict=True)
-
-        # optimization
-        self.global_optimizer = self._initialize_global_optimizer(
-            global_model, self.args
-        )
-        self.global_optimizer.load_state_dict(global_optimizer_state)
-        self.global_optimizer.step()
+        global_model.load_state_dict(mean_state_dict, strict=False)
 
     def test(self, model, loader):
         model.eval()

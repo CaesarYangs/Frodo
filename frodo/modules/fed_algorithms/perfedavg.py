@@ -5,50 +5,63 @@ import torch
 import torch.nn as nn
 from torch.optim import Optimizer
 
-from utils import Averager
-from utils import count_acc
-from utils import append_to_logs
-from utils import format_logs
+from utilities import Averager
+from utilities import count_acc
+from utilities import append_to_logs
+from utilities import format_logs
 
 from tools import construct_dataloaders
+
 
 # code link:
 # https://github.com/CharlieDinh/pFedMe
 
 
-class pFedMeOptimizer(Optimizer):
-    def __init__(self, params, lr, lamda, weight_decay=5e-4):
-        if lr < 0.0:
-            raise ValueError("Invalid learning rate: {}".format(lr))
-        defaults = dict(lr=lr, lamda=lamda, weight_decay=weight_decay)
-        super(pFedMeOptimizer, self).__init__(params, defaults)
+class MySGD(Optimizer):
+    def __init__(self, params, lr, mu, weight_decay):
+        defaults = dict(lr=lr, mu=mu, weight_decay=weight_decay)
+        super(MySGD, self).__init__(params, defaults)
 
-    def step(self, local_weight_updated, closure=None):
+    @torch.no_grad()
+    def step(self, closure=None, beta=0):
         loss = None
-
         if closure is not None:
-            loss = closure
+            with torch.enable_grad():
+                loss = closure
 
-        weight_update = local_weight_updated.copy()
         for group in self.param_groups:
-            for p, localweight in zip(group['params'], weight_update):
-                p.data = p.data - group['lr'] * (
-                    p.grad.data + group['lamda'] * (
-                        p.data - localweight.data
-                    ) + group['weight_decay'] * p.data
-                )
-        return group['params'], loss
+            for p in group['params']:
+                if p.grad is None:
+                    continue
 
-    def update_param(self, local_weight_updated, closure=None):
-        weight_update = local_weight_updated.copy()
-        for group in self.param_groups:
-            for p, localweight in zip(group['params'], weight_update):
-                p.data = localweight.data
+                param_state = self.state[p]
+                d_p = p.grad.data
 
-        return group['params']
+                if group["weight_decay"] != 0.0:
+                    d_p = d_p + group["weight_decay"] * p.data
+                    # d_p = d_p.add(p, alpha=group["weight_decay"])
+
+                if group["mu"] != 0.0:
+                    if "momentum_buffer" not in param_state:
+                        buf = torch.clone(d_p).detach()
+                        param_state["momentum_buffer"] = buf
+                    else:
+                        buf = param_state["momentum_buffer"]
+                        buf = group["mu"] * buf + d_p
+                        # buf.mul_(group["mu"]).add_(d_p)
+
+                        # update momentum buffer important !!!
+                        param_state["momentum_buffer"] = buf
+                    d_p = buf
+
+                if (beta != 0):
+                    p.data = p.data - beta * d_p
+                else:
+                    p.data = p.data - group['lr'] * d_p
+        return loss
 
 
-class pFedMe():
+class PerFedAvg():
     def __init__(
         self, csets, gset, model, args
     ):
@@ -126,12 +139,10 @@ class pFedMe():
         # lr = min(r / 10.0, 1.0) * self.args.lr
         lr = self.args.lr
 
-        loc_params = copy.deepcopy(list(model.parameters()))
-
-        optimizer = pFedMeOptimizer(
+        optimizer = MySGD(
             params=model.parameters(),
             lr=lr,
-            lamda=self.args.reg_lamb,
+            mu=self.args.momentum,
             weight_decay=self.args.weight_decay
         )
 
@@ -174,33 +185,41 @@ class pFedMe():
             if self.args.cuda:
                 batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
 
-            for k in range(self.args.k_step):
-                optimizer.zero_grad()
-                _, logits = model(batch_x)
-                criterion = nn.CrossEntropyLoss()
-                loss = criterion(logits, batch_y)
-                loss.backward()
-                per_model_bar, _ = optimizer.step(loc_params)
+            temp_params = copy.deepcopy(list(model.parameters()))
 
-                # print(k, loss.item())
-                avg_loss.add(loss.item())
+            # step 1
+            optimizer.zero_grad()
+            _, logits = model(batch_x)
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(logits, batch_y)
+            loss.backward()
+            optimizer.step()
 
-            # update local weight after finding aproximate theta
-            """
-            lamb = self.args.reg_lamb
-            for new_param, local_param in zip(per_model_bar, loc_params):
-                local_param.data = local_param.data - lamb * lr * (
-                    local_param.data - new_param.data
-                )
-            """
-            alpha = self.args.alpha
-            for new_param, local_param in zip(per_model_bar, loc_params):
-                local_param.data = local_param.data - alpha * (
-                    local_param.data - new_param.data
-                )
+            avg_loss.add(loss.item())
 
-        for param, new_param in zip(model.parameters(), loc_params):
-            param.data = new_param.data.clone()
+            # step 2
+            try:
+                batch_x, batch_y = loader_iter.next()
+            except Exception:
+                loader_iter = iter(train_loader)
+                batch_x, batch_y = loader_iter.next()
+
+            if self.args.cuda:
+                batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
+
+            optimizer.zero_grad()
+            _, logits = model(batch_x)
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(logits, batch_y)
+            loss.backward()
+
+            # restore the model parameters to the one before first update
+            for p1, p0 in zip(model.parameters(), temp_params):
+                p1.data = p0.data.clone()
+
+            optimizer.step(beta=self.args.meta_lr)
+
+            avg_loss.add(loss.item())
 
         loss = avg_loss.item()
         return model, per_accs, loss
@@ -214,17 +233,12 @@ class pFedMe():
                 vs.append(local_models[client].state_dict()[name])
             vs = torch.stack(vs, dim=0)
 
-            beta = self.args.beta
             try:
                 mean_value = vs.mean(dim=0)
-                vs = (1.0 - beta) * param + beta * mean_value
             except Exception:
                 # for BN's cnt
                 mean_value = (1.0 * vs).mean(dim=0).long()
-                vs = (1.0 - beta) * param + beta * mean_value
-                vs = vs.long()
-
-            mean_state_dict[name] = vs
+            mean_state_dict[name] = mean_value
 
         global_model.load_state_dict(mean_state_dict, strict=False)
 

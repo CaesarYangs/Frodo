@@ -5,38 +5,26 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import Averager
-from utils import count_acc
-from utils import append_to_logs
-from utils import format_logs
+from utilities import Averager
+from utilities import count_acc
+from utilities import append_to_logs
+from utilities import format_logs
 
 from tools import construct_dataloaders
 from tools import construct_optimizer
 
 
-class SpreadModel(nn.Module):
-    def __init__(self, ws, margin):
-        super().__init__()
-        self.ws = nn.Parameter(ws)
-        self.margin = margin
-
-    def forward(self):
-        ws_norm = F.normalize(self.ws, dim=1)
-        cos_dis = 0.5 * (1.0 - torch.mm(ws_norm, ws_norm.transpose(0, 1)))
-
-        d_mat = torch.diag(torch.ones(self.ws.shape[0]))
-        d_mat = d_mat.to(self.ws.device)
-
-        cos_dis = cos_dis * (1.0 - d_mat)
-
-        indx = ((self.margin - cos_dis) > 0.0).float()
-        loss = (((self.margin - cos_dis) * indx) ** 2).mean()
-        return loss
+# code link:
+# https://github.com/alpemreacar/FedDyn
 
 
-class FedAws():
+class FedDyn():
     def __init__(
-        self, csets, gset, model, args
+        self,
+        csets,
+        gset,
+        model,
+        args
     ):
         self.csets = csets
         self.gset = gset
@@ -44,6 +32,20 @@ class FedAws():
         self.args = args
 
         self.clients = list(csets.keys())
+        self.n_client = len(self.clients)
+
+        # build private gradients for each client
+        self.client_grads = {}
+        for client in self.clients:
+            self.client_grads[client] = self.build_grad_dict(model)
+
+        # global grad dict
+        # self.glo_grad = self.build_grad_dict(model)
+
+        # to cuda
+        if self.args.cuda is True:
+            self.model = self.model.cuda()
+            # self.to_device(self.glo_grad, "gpu")
 
         # construct dataloaders
         self.train_loaders, self.test_loaders, self.glo_test_loader = \
@@ -58,6 +60,19 @@ class FedAws():
             "LOCAL_TACCS": [],
         }
 
+    def build_grad_dict(self, model):
+        grad_dict = {}
+        for key, params in model.state_dict().items():
+            grad_dict[key] = torch.zeros_like(params)
+        return grad_dict
+
+    def to_device(self, grad_dict, device):
+        for key in grad_dict.keys():
+            if device == "gpu":
+                grad_dict[key] = grad_dict[key].cuda()
+            else:
+                grad_dict[key] = grad_dict[key].cpu()
+
     def train(self):
         # Training
         for r in range(1, self.args.max_round + 1):
@@ -71,14 +86,24 @@ class FedAws():
             avg_loss = Averager()
             all_per_accs = []
             for client in sam_clients:
-                local_model, per_accs, loss = self.update_local(
+                # to cuda
+                if self.args.cuda is True:
+                    self.to_device(self.client_grads[client], "gpu")
+
+                local_model, local_grad, per_accs, loss = self.update_local(
                     r=r,
                     model=copy.deepcopy(self.model),
+                    local_grad=copy.deepcopy(self.client_grads[client]),
                     train_loader=self.train_loaders[client],
                     test_loader=self.test_loaders[client],
                 )
 
                 local_models[client] = copy.deepcopy(local_model)
+
+                # update local grad
+                self.to_device(local_grad, "cpu")
+                self.client_grads[client] = copy.deepcopy(local_grad)
+
                 avg_loss.add(loss)
                 all_per_accs.append(per_accs)
 
@@ -89,11 +114,6 @@ class FedAws():
                 r=r,
                 global_model=self.model,
                 local_models=local_models,
-            )
-
-            self.update_global_classifier(
-                r=r,
-                model=self.model,
             )
 
             if r % self.args.test_round == 0:
@@ -113,7 +133,10 @@ class FedAws():
                     r, train_loss, glo_test_acc, per_accs[0], per_accs[-1]
                 ))
 
-    def update_local(self, r, model, train_loader, test_loader):
+    def update_local(self, r, model, local_grad, train_loader, test_loader):
+        glo_model = copy.deepcopy(model)
+        glo_model.eval()
+
         optimizer = construct_optimizer(
             model, self.args.lr, self.args
         )
@@ -143,7 +166,6 @@ class FedAws():
                     loader=test_loader,
                 )
                 per_accs.append(per_acc)
-
             if t >= n_total_bs:
                 break
 
@@ -160,7 +182,21 @@ class FedAws():
             hs, logits = model(batch_x)
 
             criterion = nn.CrossEntropyLoss()
-            loss = criterion(logits, batch_y)
+            ce_loss = criterion(logits, batch_y)
+
+            # FedDyn Loss
+            reg_loss = 0.0
+            cnt = 0.0
+            for name, param in model.named_parameters():
+                term1 = (param * (
+                    local_grad[name] - glo_model.state_dict()[name]
+                )).sum()
+                term2 = (param * param).sum()
+
+                reg_loss += self.args.reg_lamb * (term1 + term2)
+                cnt += 1.0
+
+            loss = ce_loss + reg_loss / cnt
 
             optimizer.zero_grad()
             loss.backward()
@@ -172,7 +208,13 @@ class FedAws():
             avg_loss.add(loss.item())
 
         loss = avg_loss.item()
-        return model, per_accs, loss
+
+        # update local_grad
+        for name, param in model.named_parameters():
+            local_grad[name] += (
+                model.state_dict()[name] - glo_model.state_dict()[name]
+            )
+        return model, local_grad, per_accs, loss
 
     def update_global(self, r, global_model, local_models):
         mean_state_dict = {}
@@ -188,28 +230,47 @@ class FedAws():
             except Exception:
                 # for BN's cnt
                 mean_value = (1.0 * vs).mean(dim=0).long()
-            mean_state_dict[name] = mean_value
+
+            alpha = self.args.c_ratio
+            mean_state_dict[name] = alpha * mean_value + (1.0 - alpha) * param
 
         global_model.load_state_dict(mean_state_dict, strict=False)
 
-    def update_global_classifier(self, r, model):
-        ws = model.classifier.weight.data
-        sm = SpreadModel(ws, margin=self.args.margin)
+    """
+    def update_global(self, r, global_model, local_models, glo_grad):
+        sum_state_dict = {}
 
-        optimizer = torch.optim.SGD(
-            sm.parameters(), lr=self.args.aws_lr, momentum=0.9
-        )
+        K = len(self.clients)
+        M = int(self.args.c_ratio * K)
 
-        for _ in range(self.args.aws_steps):
-            loss = sm.forward()
+        for name, param in global_model.state_dict().items():
+            vs = []
+            for client in local_models.keys():
+                vs.append(local_models[client].state_dict()[name])
+            vs = torch.stack(vs, dim=0)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            try:
+                sum_value = vs.sum(dim=0)
+            except Exception:
+                # for BN's cnt
+                sum_value = (1.0 * vs).sum(dim=0).long()
+            sum_state_dict[name] = sum_value
 
-            # print(loss.item())
+        # update glo grad & global model
+        state_dict = {}
+        lamb = self.args.reg_lamb
+        for name, param in global_model.state_dict().items():
+            glo_grad[name] -= lamb / K * (
+                sum_state_dict[name] - param
+            )
 
-        model.load_state_dict({"classifier.weight": sm.ws.data}, strict=False)
+            state_dict[name] = sum_state_dict[name] / M - glo_grad[name] / lamb
+
+            if "run" in name:
+                state_dict[name] = state_dict[name].long()
+
+        global_model.load_state_dict(state_dict, strict=False)
+    """
 
     def test(self, model, loader):
         model.eval()
@@ -220,6 +281,7 @@ class FedAws():
             for i, (batch_x, batch_y) in enumerate(loader):
                 if self.args.cuda:
                     batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
+
                 _, logits = model(batch_x)
                 acc = count_acc(logits, batch_y)
                 acc_avg.add(acc)

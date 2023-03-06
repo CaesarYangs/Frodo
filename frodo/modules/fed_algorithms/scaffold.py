@@ -4,16 +4,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from utils import Averager
-from utils import count_acc
-from utils import append_to_logs
-from utils import format_logs
+from utilities import Averager
+from utilities import count_acc
+from utilities import append_to_logs
+from utilities import format_logs
 
 from tools import construct_dataloaders
 
 # code link
 # https://github.com/ramshi236/Accelerated-Federated-Learning-Over-MAC-in-Heterogeneous-Networks
-# Scaffold + FedRS
 
 
 class ScaffoldOptimizer(torch.optim.Optimizer):
@@ -52,7 +51,7 @@ class ScaffoldOptimizer(torch.optim.Optimizer):
         return loss
 
 
-class ScaffoldRS():
+class Scaffold():
     def __init__(
         self, csets, gset, model, args
     ):
@@ -76,35 +75,15 @@ class ScaffoldRS():
             "LOCAL_TACCS": [],
         }
 
-        # client_cnts
-        self.client_cnts = self.get_client_dists(
-            csets=self.csets,
-            args=self.args
-        )
-
         # control variates
         self.server_control = self.init_control(model)
-        self.set_control_cuda(self.server_control, False)   ######## cuda controller
+        self.set_control_cuda(self.server_control, True)
 
         self.client_controls = {
             client: self.init_control(model) for client in self.clients
         }
 
-    def get_client_dists(self, csets, args):
-        client_cnts = {}
-        for client in csets.keys():
-            info = csets[client]
-
-            cnts = [
-                np.sum(info[0].ys == c) for c in range(args.n_classes)
-            ]
-
-            cnts = torch.FloatTensor(np.array(cnts))
-            client_cnts[client] = cnts
-
-        return client_cnts
-
-    def set_control_cuda(self, control, cuda=False):
+    def set_control_cuda(self, control, cuda=True):
         for name in control.keys():
             if cuda is True:
                 control[name] = control[name].cuda()
@@ -136,10 +115,7 @@ class ScaffoldRS():
             all_per_accs = []
             for client in sam_clients:
                 # control to gpu
-                self.set_control_cuda(self.client_controls[client], False) # cuda controller
-
-                cnts = self.client_cnts[client]
-                dist = cnts / cnts.sum()
+                self.set_control_cuda(self.client_controls[client], True)
 
                 # update local with control variates / ScaffoldOptimizer
                 delta_model, per_accs, local_steps, loss = self.update_local(
@@ -149,7 +125,6 @@ class ScaffoldRS():
                     test_loader=self.test_loaders[client],
                     server_control=self.server_control,
                     client_control=self.client_controls[client],
-                    dist=dist
                 )
 
                 client_control, delta_control = self.update_local_control(
@@ -213,7 +188,7 @@ class ScaffoldRS():
 
     def update_local(
             self, r, model, train_loader, test_loader,
-            server_control, client_control, dist):
+            server_control, client_control):
         # lr = min(r / 10.0, 1.0) * self.args.lr
         lr = self.args.lr
 
@@ -264,17 +239,7 @@ class ScaffoldRS():
             if self.args.cuda:
                 batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
 
-            if self.args.cuda:
-                dist = dist.cuda()
-
-            hs, _ = model(batch_x)
-            ws = model.classifier.weight
-
-            cdist = dist / dist.max()
-            cdist = cdist * (1.0 - self.args.alpha) + self.args.alpha
-            cdist = cdist.reshape((1, -1))
-
-            logits = cdist * hs.mm(ws.transpose(0, 1))
+            hs, logits = model(batch_x)
 
             criterion = nn.CrossEntropyLoss()
             loss = criterion(logits, batch_y)

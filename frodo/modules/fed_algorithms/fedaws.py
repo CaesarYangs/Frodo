@@ -5,24 +5,38 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import Averager
-from utils import count_acc
-from utils import append_to_logs
-from utils import format_logs
+from utilities import Averager
+from utilities import count_acc
+from utilities import append_to_logs
+from utilities import format_logs
 
 from tools import construct_dataloaders
 from tools import construct_optimizer
 
-# https://github.com/QinbinLi/MOON
+
+class SpreadModel(nn.Module):
+    def __init__(self, ws, margin):
+        super().__init__()
+        self.ws = nn.Parameter(ws)
+        self.margin = margin
+
+    def forward(self):
+        ws_norm = F.normalize(self.ws, dim=1)
+        cos_dis = 0.5 * (1.0 - torch.mm(ws_norm, ws_norm.transpose(0, 1)))
+
+        d_mat = torch.diag(torch.ones(self.ws.shape[0]))
+        d_mat = d_mat.to(self.ws.device)
+
+        cos_dis = cos_dis * (1.0 - d_mat)
+
+        indx = ((self.margin - cos_dis) > 0.0).float()
+        loss = (((self.margin - cos_dis) * indx) ** 2).mean()
+        return loss
 
 
-class MOON():
+class FedAws():
     def __init__(
-        self,
-        csets,
-        gset,
-        model,
-        args
+        self, csets, gset, model, args
     ):
         self.csets = csets
         self.gset = gset
@@ -30,18 +44,6 @@ class MOON():
         self.args = args
 
         self.clients = list(csets.keys())
-        self.n_client = len(self.clients)
-
-        # copy private models for each client
-        self.client_models = {}
-        for client in self.clients:
-            self.client_models[client] = copy.deepcopy(
-                model.cpu()
-            )
-
-        # to cuda
-        if self.args.cuda is True:
-            self.model = self.model.cuda()
 
         # construct dataloaders
         self.train_loaders, self.test_loaders, self.glo_test_loader = \
@@ -69,23 +71,14 @@ class MOON():
             avg_loss = Averager()
             all_per_accs = []
             for client in sam_clients:
-                # to cuda
-                if self.args.cuda is True:
-                    self.client_models[client].cuda()
-
                 local_model, per_accs, loss = self.update_local(
                     r=r,
                     model=copy.deepcopy(self.model),
-                    local_model=copy.deepcopy(self.client_models[client]),
                     train_loader=self.train_loaders[client],
                     test_loader=self.test_loaders[client],
                 )
 
                 local_models[client] = copy.deepcopy(local_model)
-
-                # update local model
-                self.client_models[client] = copy.deepcopy(local_model.cpu())
-
                 avg_loss.add(loss)
                 all_per_accs.append(per_accs)
 
@@ -96,6 +89,11 @@ class MOON():
                 r=r,
                 global_model=self.model,
                 local_models=local_models,
+            )
+
+            self.update_global_classifier(
+                r=r,
+                model=self.model,
             )
 
             if r % self.args.test_round == 0:
@@ -115,11 +113,7 @@ class MOON():
                     r, train_loss, glo_test_acc, per_accs[0], per_accs[-1]
                 ))
 
-    def update_local(self, r, model, local_model, train_loader, test_loader):
-        glo_model = copy.deepcopy(model)
-        glo_model.eval()
-        local_model.eval()
-
+    def update_local(self, r, model, train_loader, test_loader):
         optimizer = construct_optimizer(
             model, self.args.lr, self.args
         )
@@ -149,6 +143,7 @@ class MOON():
                     loader=test_loader,
                 )
                 per_accs.append(per_acc)
+
             if t >= n_total_bs:
                 break
 
@@ -163,18 +158,9 @@ class MOON():
                 batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
 
             hs, logits = model(batch_x)
-            hs1, _ = glo_model(batch_x)
-            hs0, _ = local_model(batch_x)
 
             criterion = nn.CrossEntropyLoss()
-            ce_loss = criterion(logits, batch_y)
-
-            # moon loss
-            ct_loss = self.contrastive_loss(
-                hs, hs0.detach(), hs1.detach()
-            )
-
-            loss = ce_loss + self.args.reg_lamb * ct_loss
+            loss = criterion(logits, batch_y)
 
             optimizer.zero_grad()
             loss.backward()
@@ -187,19 +173,6 @@ class MOON():
 
         loss = avg_loss.item()
         return model, per_accs, loss
-
-    def contrastive_loss(self, hs, hs0, hs1):
-        cs = nn.CosineSimilarity(dim=-1)
-        sims0 = cs(hs, hs0)
-        sims1 = cs(hs, hs1)
-
-        sims = 2.0 * torch.stack([sims0, sims1], dim=1)
-        labels = torch.LongTensor([1] * hs.shape[0])
-        labels = labels.to(hs.device)
-
-        criterion = nn.CrossEntropyLoss()
-        ct_loss = criterion(sims, labels)
-        return ct_loss
 
     def update_global(self, r, global_model, local_models):
         mean_state_dict = {}
@@ -219,6 +192,25 @@ class MOON():
 
         global_model.load_state_dict(mean_state_dict, strict=False)
 
+    def update_global_classifier(self, r, model):
+        ws = model.classifier.weight.data
+        sm = SpreadModel(ws, margin=self.args.margin)
+
+        optimizer = torch.optim.SGD(
+            sm.parameters(), lr=self.args.aws_lr, momentum=0.9
+        )
+
+        for _ in range(self.args.aws_steps):
+            loss = sm.forward()
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            # print(loss.item())
+
+        model.load_state_dict({"classifier.weight": sm.ws.data}, strict=False)
+
     def test(self, model, loader):
         model.eval()
 
@@ -228,7 +220,6 @@ class MOON():
             for i, (batch_x, batch_y) in enumerate(loader):
                 if self.args.cuda:
                     batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
-
                 _, logits = model(batch_x)
                 acc = count_acc(logits, batch_y)
                 acc_avg.add(acc)
