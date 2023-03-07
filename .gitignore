@@ -9,3 +9,4 @@ static/js/lib/
 .vscode/
 .idea/
 config/config.json
+data/

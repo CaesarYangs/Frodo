@@ -6,10 +6,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
 
-from utils import Averager
-from utils import count_acc
-from utils import append_to_logs
-from utils import format_logs
+from utilities import Averager
+from utilities import count_acc
+from utilities import append_to_logs
+from utilities import format_logs
 
 from tools import construct_dataloaders
 from tools import construct_optimizer

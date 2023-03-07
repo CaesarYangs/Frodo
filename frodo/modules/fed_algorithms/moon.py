@@ -3,19 +3,26 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from utils import Averager
-from utils import count_acc
-from utils import append_to_logs
-from utils import format_logs
+from utilities import Averager
+from utilities import count_acc
+from utilities import append_to_logs
+from utilities import format_logs
 
 from tools import construct_dataloaders
 from tools import construct_optimizer
 
+# https://github.com/QinbinLi/MOON
 
-class FedAvg():
+
+class MOON():
     def __init__(
-        self, csets, gset, model, args
+        self,
+        csets,
+        gset,
+        model,
+        args
     ):
         self.csets = csets
         self.gset = gset
@@ -23,6 +30,18 @@ class FedAvg():
         self.args = args
 
         self.clients = list(csets.keys())
+        self.n_client = len(self.clients)
+
+        # copy private models for each client
+        self.client_models = {}
+        for client in self.clients:
+            self.client_models[client] = copy.deepcopy(
+                model.cpu()
+            )
+
+        # to cuda
+        if self.args.cuda is True:
+            self.model = self.model.cuda()
 
         # construct dataloaders
         self.train_loaders, self.test_loaders, self.glo_test_loader = \
@@ -50,14 +69,23 @@ class FedAvg():
             avg_loss = Averager()
             all_per_accs = []
             for client in sam_clients:
+                # to cuda
+                if self.args.cuda is True:
+                    self.client_models[client].cuda()
+
                 local_model, per_accs, loss = self.update_local(
                     r=r,
                     model=copy.deepcopy(self.model),
+                    local_model=copy.deepcopy(self.client_models[client]),
                     train_loader=self.train_loaders[client],
                     test_loader=self.test_loaders[client],
                 )
 
                 local_models[client] = copy.deepcopy(local_model)
+
+                # update local model
+                self.client_models[client] = copy.deepcopy(local_model.cpu())
+
                 avg_loss.add(loss)
                 all_per_accs.append(per_accs)
 
@@ -87,12 +115,13 @@ class FedAvg():
                     r, train_loss, glo_test_acc, per_accs[0], per_accs[-1]
                 ))
 
-    def update_local(self, r, model, train_loader, test_loader):
-        # lr = min(r / 10.0, 1.0) * self.args.lr
-        lr = self.args.lr
+    def update_local(self, r, model, local_model, train_loader, test_loader):
+        glo_model = copy.deepcopy(model)
+        glo_model.eval()
+        local_model.eval()
 
         optimizer = construct_optimizer(
-            model, lr, self.args
+            model, self.args.lr, self.args
         )
 
         if self.args.local_steps is not None:
@@ -120,7 +149,6 @@ class FedAvg():
                     loader=test_loader,
                 )
                 per_accs.append(per_acc)
-
             if t >= n_total_bs:
                 break
 
@@ -129,18 +157,24 @@ class FedAvg():
                 batch_x, batch_y = loader_iter.next()
             except Exception:
                 loader_iter = iter(train_loader)
-                batch_x, batch_y = next(loader_iter)
-                # batch_x, batch_y = loader_iter.next()
+                batch_x, batch_y = loader_iter.next()
 
             if self.args.cuda:
-                batch_x, batch_y = batch_x.to(torch.device(
-                    "mps")), batch_y.to(torch.device("mps"))
-                # batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
+                batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
 
             hs, logits = model(batch_x)
+            hs1, _ = glo_model(batch_x)
+            hs0, _ = local_model(batch_x)
 
             criterion = nn.CrossEntropyLoss()
-            loss = criterion(logits, batch_y)
+            ce_loss = criterion(logits, batch_y)
+
+            # moon loss
+            ct_loss = self.contrastive_loss(
+                hs, hs0.detach(), hs1.detach()
+            )
+
+            loss = ce_loss + self.args.reg_lamb * ct_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -154,7 +188,19 @@ class FedAvg():
         loss = avg_loss.item()
         return model, per_accs, loss
 
-    # 真正的算法核心——联邦平均过程
+    def contrastive_loss(self, hs, hs0, hs1):
+        cs = nn.CosineSimilarity(dim=-1)
+        sims0 = cs(hs, hs0)
+        sims1 = cs(hs, hs1)
+
+        sims = 2.0 * torch.stack([sims0, sims1], dim=1)
+        labels = torch.LongTensor([1] * hs.shape[0])
+        labels = labels.to(hs.device)
+
+        criterion = nn.CrossEntropyLoss()
+        ct_loss = criterion(sims, labels)
+        return ct_loss
+
     def update_global(self, r, global_model, local_models):
         mean_state_dict = {}
 
@@ -181,9 +227,8 @@ class FedAvg():
         with torch.no_grad():
             for i, (batch_x, batch_y) in enumerate(loader):
                 if self.args.cuda:
-                    batch_x, batch_y = batch_x.to(torch.device(
-                        "mps")), batch_y.to(torch.device("mps"))
-                    # batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
+                    batch_x, batch_y = batch_x.cuda(), batch_y.cuda()
+
                 _, logits = model(batch_x)
                 acc = count_acc(logits, batch_y)
                 acc_avg.add(acc)
