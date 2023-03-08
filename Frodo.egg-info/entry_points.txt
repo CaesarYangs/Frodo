@@ -1,0 +1,2 @@
+[console_scripts]
+frodo_data_construct = frodo.data_construct:main
