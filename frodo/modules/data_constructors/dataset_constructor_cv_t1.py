@@ -223,6 +223,7 @@ class DataConstructorCV_T1(object):
                     list_file.write('\n')
                 list_file.close()
             print("done---generate txt for training done")
+        return True
 
 
 def main():
