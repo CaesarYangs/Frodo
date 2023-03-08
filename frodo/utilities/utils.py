@@ -21,22 +21,34 @@ def get_classes_info(classes_path):
 
 
 def recursive_find_python_class(folder, trainer_name, current_module):
-    tr = None
-    for importer, modname, ispkg in pkgutil.iter_modules(folder):
-        # print(modname, ispkg)
-        if not ispkg:
-            m = importlib.import_module(current_module + "." + modname)
+    class_name = None
+    modules = os.listdir(folder)
+    for mod_name in modules:
+        mod_name = os.path.splitext(mod_name)[0]
+        if trainer_name == mod_name:
+            m = importlib.import_module(current_module+'.'+mod_name)
             if hasattr(m, trainer_name):
-                tr = getattr(m, trainer_name)
+                class_name = getattr(m, trainer_name)
                 break
 
-    if tr is None:
-        for importer, modname, ispkg in pkgutil.iter_modules(folder):
-            if ispkg:
-                next_current_module = current_module + "." + modname
-                tr = recursive_find_python_class(
-                    [join(folder[0], modname)], trainer_name, current_module=next_current_module)
-            if tr is not None:
-                break
+    # for _, modname, ispkg in pkgutil.iter_modules(folder):
+    #     print('====', modname, ispkg)
+    #     if not ispkg:
+    #         m = importlib.import_module(current_module + "." + modname)
+    #         if hasattr(m, trainer_name):
+    #             tr = getattr(m, trainer_name)
+    #             break
 
-    return tr
+    # if tr is None:
+    #     for _, modname, ispkg in pkgutil.iter_modules(folder):
+    #         print("==--:", modname, ispkg)
+    #         if ispkg:
+    #             next_current_module = current_module + "." + modname
+    #             next_folder = os.path.join(folder, modname)
+
+    #             tr = recursive_find_python_class(
+    #                 next_folder, trainer_name, current_module=next_current_module)
+    #         if tr is not None:
+    #             break
+
+    return class_name
