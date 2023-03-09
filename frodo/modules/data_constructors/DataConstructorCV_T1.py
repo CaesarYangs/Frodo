@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import random
+import yaml
 from shutil import copyfile
 import xml.etree.ElementTree as ET
 from frodo.utilities.utils import get_classes_info
@@ -26,9 +27,11 @@ classes_nums = np.zeros(len(classes))
 
 
 class DataConstructorCV_T1(object):
-    def __init__(self, dataset_properties):
+    def __init__(self, dataset_properties=None):
         if dataset_properties:
             self.dataset_properties = dataset_properties
+        else:
+            self.dataset_properties = dict()
 
     def set_target_position(self, dataset_properties=None):
         """自动化设置目标目录结构
@@ -68,7 +71,7 @@ class DataConstructorCV_T1(object):
         return target_detail_path, target_data_path
 
     def move_dataset(self):
-        if not self.dataset_properties['target_data_path']:
+        if self.dataset_properties['target_data_path'] == self.dataset_properties['origin_data_path']:
             return
 
         target_detail_path, target_data_path = self.set_target_position()
@@ -143,6 +146,58 @@ class DataConstructorCV_T1(object):
 
     def peek_set():
         pass
+
+    def set_construct_param_from_config(self, data_hyp_dict):
+        """return self.dataset_properties
+
+        Args:
+            config_path (str): _description_
+
+        Returns:
+            dict: dataset_properties
+        """
+        self.dataset_properties['origin_data_path'] = data_hyp_dict['origin_data_path']
+        self.dataset_properties['target_data_path'] = data_hyp_dict['target_data_path']
+        # self.dataset_properties['classes_path'] = classes_path
+        self.dataset_properties['target_data_set'] = data_hyp_dict['target_data_set']
+        self.dataset_properties['construct_mode'] = data_hyp_dict['construct_mode']
+        self.dataset_properties['train_val_percent'] = data_hyp_dict['train_val_percent']
+        self.dataset_properties['train_percent'] = data_hyp_dict['train_percent']
+
+        self.dataset_properties['data_nums'] = np.zeros(len(origin_data_path))
+        classes = self.dataset_properties['classes'] = data_hyp_dict['classes']
+        self.dataset_properties['traclasses_numsin_percent'] = np.zeros(
+            len(classes))
+
+        return self.dataset_properties
+
+    def set_construct_param_default(self, origin_data_path='', target_data_path='', classes_path=''):
+        """利用一些设定的初始值生成dataset_properties
+
+        Args:
+            origin_data_path (_type_): _description_
+            target_data_path (_type_): _description_
+            label_file_path (_type_): _description_
+
+        Returns:
+            dict: dataset_properties
+        """
+
+        self.dataset_properties['origin_data_path'] = origin_data_path
+        self.dataset_properties['target_data_path'] = target_data_path
+        self.dataset_properties['classes_path'] = classes_path
+        self.dataset_properties['target_data_set'] = (
+            '', 'train.txt', 'val.txt')
+        self.dataset_properties['construct_mode'] = 0
+        self.dataset_properties['train_val_percent'] = 0.9
+        self.dataset_properties['train_percent'] = 0.9
+
+        self.dataset_properties['data_nums'] = np.zeros(len(origin_data_path))
+        self.dataset_properties['classes'], _ = get_classes_info(classes_path)
+        self.dataset_properties['traclasses_numsin_percent'] = np.zeros(
+            len(classes))
+
+        return self.dataset_properties
 
     def dataset_constructor(self, dataset_properties=None):
         random.seed(0)
@@ -223,6 +278,7 @@ class DataConstructorCV_T1(object):
                     list_file.write('\n')
                 list_file.close()
             print("done---generate txt for training done")
+        return True
 
 
 def main():
@@ -237,8 +293,9 @@ def main():
     dataset_properties['classes'] = classes
     dataset_properties['classes_nums'] = classes_nums
 
-    test1 = DataConstructorCV_T1(dataset_properties)
-    test1.dataset_constructor()
+    print(classes)
+    # test1 = DataConstructorCV_T1(dataset_properties)
+    # test1.dataset_constructor()
 
 
 if __name__ == "__main__":
