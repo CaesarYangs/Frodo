@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import random
+import yaml
 from shutil import copyfile
 import xml.etree.ElementTree as ET
 from frodo.utilities.utils import get_classes_info
@@ -146,7 +147,7 @@ class DataConstructorCV_T1(object):
     def peek_set():
         pass
 
-    def set_construct_param_from_config(self, config_path):
+    def set_construct_param_from_config(self, data_hyp_dict):
         """return self.dataset_properties
 
         Args:
@@ -155,6 +156,19 @@ class DataConstructorCV_T1(object):
         Returns:
             dict: dataset_properties
         """
+        self.dataset_properties['origin_data_path'] = data_hyp_dict['origin_data_path']
+        self.dataset_properties['target_data_path'] = data_hyp_dict['target_data_path']
+        # self.dataset_properties['classes_path'] = classes_path
+        self.dataset_properties['target_data_set'] = data_hyp_dict['target_data_set']
+        self.dataset_properties['construct_mode'] = data_hyp_dict['construct_mode']
+        self.dataset_properties['train_val_percent'] = data_hyp_dict['train_val_percent']
+        self.dataset_properties['train_percent'] = data_hyp_dict['train_percent']
+
+        self.dataset_properties['data_nums'] = np.zeros(len(origin_data_path))
+        classes = self.dataset_properties['classes'] = data_hyp_dict['classes']
+        self.dataset_properties['traclasses_numsin_percent'] = np.zeros(
+            len(classes))
+
         return self.dataset_properties
 
     def set_construct_param_default(self, origin_data_path='', target_data_path='', classes_path=''):
@@ -279,8 +293,9 @@ def main():
     dataset_properties['classes'] = classes
     dataset_properties['classes_nums'] = classes_nums
 
-    test1 = DataConstructorCV_T1(dataset_properties)
-    test1.dataset_constructor()
+    print(classes)
+    # test1 = DataConstructorCV_T1(dataset_properties)
+    # test1.dataset_constructor()
 
 
 if __name__ == "__main__":

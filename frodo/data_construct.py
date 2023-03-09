@@ -1,12 +1,15 @@
 import frodo
 import shutil
+import yaml
 import os
 from frodo.utilities.utils import recursive_find_python_class
 
 
 def set_construct_param_from_config(constructor, config_path):
+    with open(config_path, 'r', encoding='utf-8') as f:
+        data_hyp_dict = yaml.load(f.read(), Loader=yaml.FullLoader)
     dataset_properties = constructor.set_construct_param_from_config(
-        config_path)
+        data_hyp_dict)
     return dataset_properties
 
 
