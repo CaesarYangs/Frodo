@@ -27,7 +27,8 @@ setup(name='Frodo',
       ],
       entry_points={
           'console_scripts': [
-              'frodo_data_construct = frodo.data_construct:main'
+              'frodo_data_construction = frodo.data_construction:main',
+              'frodo_preprocessing = frodo.pre_processing'
           ],
       },
       keywords=['deep learning']

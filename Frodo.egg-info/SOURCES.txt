@@ -6,10 +6,10 @@ Frodo.egg-info/dependency_links.txt
 Frodo.egg-info/entry_points.txt
 Frodo.egg-info/top_level.txt
 frodo/__init__.py
-frodo/data_construct.py
-frodo/modules/data_constructors/dataset_constructor_cv_T1.py
-frodo/modules/data_constructors/dataset_constructor_cv_t1.py
-frodo/modules/data_constructors/tempCodeRunnerFile.py
+frodo/data_construction.py
+frodo/pre_processing.py
+frodo/modules/data_construction/DataConstructorCV_T1.py
+frodo/modules/data_construction/tempCodeRunnerFile.py
 frodo/modules/dataloaders/__init__.py
 frodo/modules/fed_algorithms/__init__.py
 frodo/modules/fed_algorithms/fedavg.py
@@ -29,6 +29,7 @@ frodo/modules/models/__init__.py
 frodo/modules/models/detection/yolov5/CSP_darknet.py
 frodo/modules/models/segmentation/UNet/__init__.py
 frodo/modules/nets/__init__.py
+frodo/modules/pre_precessing/PreProcessor_T1.py
 frodo/predictors/__init__.py
 frodo/trainers/__init__.py
 frodo/utilities/__init__.py

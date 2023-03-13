@@ -48,9 +48,9 @@ def main():
     target_data_path = args.target_data_path
     label_file_path = args.label_file_path
 
-    search_in = os.path.join(frodo.__path__[0], "modules/data_constructors")
+    search_in = os.path.join(frodo.__path__[0], "modules/data_construction")
     constructor_class = recursive_find_python_class(
-        search_in, args.constructor, 'frodo.modules.data_constructors')
+        search_in, args.constructor, 'frodo.modules.data_construction')
 
     constructor_obj = constructor_class()
 

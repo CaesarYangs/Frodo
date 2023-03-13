@@ -2,9 +2,9 @@
 
 
 # 原始数据和标记存放目录
-origin_data_path: '/Users/caesaryang/Downloads/test_data2'
+origin_data_path: '/Users/caesaryang/Downloads/test_data'
 # 目标数据和标记存放目录，若无需改变位置，设空即可
-target_data_path: '/Users/caesaryang/Downloads/configtestsdafdjslfh'
+target_data_path: '/Users/caesaryang/Downloads/test_data3'
 # 训练时需要的文件索引文件存放目录，置空则为与原始数据同级目录
 target_data_set: !!python/tuple ['', 'train.txt', 'val.txt']
 # 存放类别数据的文件，置空则为与原始数据同级目录

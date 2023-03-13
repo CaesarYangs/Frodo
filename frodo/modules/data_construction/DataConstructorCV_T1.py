@@ -20,10 +20,10 @@ construct_mode = 0
 train_val_percent = 0.9
 train_percent = 0.9
 
-# ---一些动态计算参数
-data_nums = np.zeros(len(origin_data_path))
-classes, _ = get_classes_info(classes_path)
-classes_nums = np.zeros(len(classes))
+# # ---一些动态计算参数
+# data_nums = np.zeros(len(origin_data_path))
+# classes, _ = get_classes_info(classes_path)
+# classes_nums = np.zeros(len(classes))
 
 
 class DataConstructorCV_T1(object):
@@ -101,7 +101,7 @@ class DataConstructorCV_T1(object):
         target_data_path = self.dataset_properties['target_data_path']
         classes = self.dataset_properties['classes']
 
-        assert os.path.exists('data')
+        # assert os.path.exists('data')
 
         file = open(os.path.join(target_data_path,
                     'Annotations/%s.xml' % (image_id)), encoding='utf-8')
@@ -120,7 +120,7 @@ class DataConstructorCV_T1(object):
             b = (int(float(xml_box.find('xmin').text)), int(float(xml_box.find('ymin').text)), int(
                 float(xml_box.find('xmax').text)), int(float(xml_box.find('ymax').text)))
 
-            classes_nums[classes.index(cls)] += 1
+            self.dataset_properties['classes_nums'][classes.index(cls)] += 1
             datalist_file.write(" " + ",".join([str(a)
                                                 for a in b]) + ',' + str(cls_id))
 
@@ -166,7 +166,7 @@ class DataConstructorCV_T1(object):
 
         self.dataset_properties['data_nums'] = np.zeros(len(origin_data_path))
         classes = self.dataset_properties['classes'] = data_hyp_dict['classes']
-        self.dataset_properties['traclasses_numsin_percent'] = np.zeros(
+        self.dataset_properties['classes_nums'] = np.zeros(
             len(classes))
 
         return self.dataset_properties
@@ -194,8 +194,8 @@ class DataConstructorCV_T1(object):
 
         self.dataset_properties['data_nums'] = np.zeros(len(origin_data_path))
         self.dataset_properties['classes'], _ = get_classes_info(classes_path)
-        self.dataset_properties['traclasses_numsin_percent'] = np.zeros(
-            len(classes))
+        self.dataset_properties['classes_nums'] = np.zeros(
+            len(self.dataset_properties['classes']))
 
         return self.dataset_properties
 
