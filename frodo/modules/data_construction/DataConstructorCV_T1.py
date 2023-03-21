@@ -289,11 +289,11 @@ def main():
     dataset_properties['construct_mode'] = construct_mode
     dataset_properties['train_val_percent'] = train_val_percent
     dataset_properties['train_percent'] = train_percent
-    dataset_properties['data_nums'] = data_nums
-    dataset_properties['classes'] = classes
-    dataset_properties['classes_nums'] = classes_nums
+    # dataset_properties['data_nums'] = data_nums
+    # dataset_properties['classes'] = classes
+    # dataset_properties['classes_nums'] = classes_nums
 
-    print(classes)
+    # print(classes)
     # test1 = DataConstructorCV_T1(dataset_properties)
     # test1.dataset_constructor()
 

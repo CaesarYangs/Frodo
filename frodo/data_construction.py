@@ -2,6 +2,7 @@ import frodo
 import shutil
 import yaml
 import os
+import logging
 from frodo.utilities.utils import recursive_find_python_class
 
 
@@ -27,7 +28,7 @@ def main():
     parser.add_argument('-c', '--config', type=str,
                         help='Determain whether to use a detailed configuration file to set construct process')
     # ===if not using config file
-    parser.add_argument("-cons", "--constructor", type=str, default="DataConstructorCV_T1",
+    parser.add_argument("-cons", "--constructor", type=str, default="DataConstructorVOC_T1",
                         help="Name of the construct class for dataset construction.Default for DataConstructorCV_T1.")
     # origin_data_path
     parser.add_argument('-odp', "--origin_data_path", type=str,
@@ -40,7 +41,7 @@ def main():
                         help='String to locate the label or classes file.')
 
     args = parser.parse_args()
-    print(args.constructor)
+    print('Using dataset constructor:', args.constructor)
 
     config = args.config
     constructor = args.constructor
@@ -62,6 +63,7 @@ def main():
             constructor_obj, origin_data_path, target_data_path, label_file_path)
 
     if constructor_obj.dataset_constructor():
-        print('done')
+        logging.info("Dataset construction for training done")
+        print("---Generating Success---")
     else:
-        print('constructor error')
+        logging.error('Constructor error')

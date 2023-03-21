@@ -8,7 +8,9 @@ Frodo.egg-info/top_level.txt
 frodo/__init__.py
 frodo/data_construction.py
 frodo/pre_processing.py
+frodo/modules/data_construction/DataConstructor.py
 frodo/modules/data_construction/DataConstructorCV_T1.py
+frodo/modules/data_construction/DataConstructorVOC_T1.py
 frodo/modules/data_construction/tempCodeRunnerFile.py
 frodo/modules/dataloaders/__init__.py
 frodo/modules/fed_algorithms/__init__.py
