@@ -1,0 +1,3 @@
+[console_scripts]
+frodo_data_construction = frodo.data_construction:main
+frodo_preprocessing = frodo.pre_processing

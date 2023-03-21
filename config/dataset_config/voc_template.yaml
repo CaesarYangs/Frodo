@@ -1,0 +1,40 @@
+# 原始数据和标记存放目录
+origin_data_path: "/Users/caesaryang/Downloads/test_data"
+# 目标数据和标记存放目录，若无需改变位置，设空即可
+target_data_path: "/Users/caesaryang/Downloads/test_data3"
+# 训练时需要的文件索引文件存放目录，置空则为与原始数据同级目录
+target_data_set: !!python/tuple ["", "train.txt", "val.txt"]
+# 存放类别数据的文件，置空则为与原始数据同级目录
+# classes_path: 'data/voc_classes.txt'
+
+# ---模型数据集所需的基本参数
+construct_mode: 0
+train_val_percent: 0.9
+train_percent: 0.9
+
+# 数据集类别信息
+classes: [
+    "aeroplane",
+    "bicycle",
+    "bird",
+    "boat",
+    "bottle",
+    "bus",
+    "car",
+    "cat",
+    "chair",
+    "cow",
+    "diningtable",
+    "dog",
+    "horse",
+    "motorbike",
+    "person",
+    "pottedplant",
+    "sheep",
+    "sofa",
+    "train",
+    "tvmonitor",
+  ] # 数据集类别名
+
+# 数据集下载地址
+download: https://github.com/ultralytics/yolov5/releases/download/v1.0/coco128.zip

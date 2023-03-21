@@ -1,0 +1,18 @@
+# 原始数据和标记存放目录
+origin_data_path: "/Users/caesaryang/Developer/1-Graduate/datasets/helmet_test1"
+# 目标数据和标记存放目录，若无需改变位置，设空即可
+target_data_path: "/Users/caesaryang/Downloads/test_new_class"
+# 训练时需要的文件索引文件存放目录，置空则为与原始数据同级目录
+# target_data_set: !!python/tuple ["", "train.txt", "val.txt"]
+target_data_set: !!python/tuple ["train", "val", "test"]
+
+# ---模型数据集所需的基本参数
+construct_mode: 0
+train_val_percent: 0.9
+train_percent: 0.9
+
+# 数据集类别信息
+classes: ["0", "1"] # 数据集类别名
+
+# 数据集下载地址
+download: https://github.com/ultralytics/yolov5/releases/download/v1.0/coco128.zip
