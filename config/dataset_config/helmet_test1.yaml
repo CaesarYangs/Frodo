@@ -1,7 +1,7 @@
 # 原始数据和标记存放目录
 origin_data_path: "/Users/caesaryang/Developer/1-Graduate/datasets/helmet_test1"
 # 目标数据和标记存放目录，若无需改变位置，设空即可
-target_data_path: "/Users/caesaryang/Downloads/test_new_class"
+target_data_path: "/Users/caesaryang/Developer/1-Graduate/datasets/helmet_test3"
 # 训练时需要的文件索引文件存放目录，置空则为与原始数据同级目录
 # target_data_set: !!python/tuple ["", "train.txt", "val.txt"]
 target_data_set: !!python/tuple ["train", "val", "test"]

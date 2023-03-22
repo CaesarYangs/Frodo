@@ -9,6 +9,9 @@ from frodo.utilities.utils import get_classes_info
 
 
 class DataConstructor:
+    """DataConstructor parent class
+    """
+
     def __init__(self, dataset_properties=None):
         if dataset_properties:
             self.dataset_properties = dataset_properties

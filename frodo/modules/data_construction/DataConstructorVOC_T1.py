@@ -37,7 +37,7 @@ class DataConstructorVOC_T1(DataConstructor):
         logging.info('Load config from file successfully')
         return self.dataset_properties
 
-    def set_target_position_dir(self, dataset_properties=None):
+    def set_target_position_dir(self):
         """_summary_
 
         Args:
@@ -46,8 +46,7 @@ class DataConstructorVOC_T1(DataConstructor):
         Returns:
             _type_: _description_
         """
-        if not dataset_properties:
-            dataset_properties = self.dataset_properties
+        dataset_properties = self.dataset_properties
 
         target_data_path = dataset_properties['target_data_path']
 
@@ -75,7 +74,7 @@ class DataConstructorVOC_T1(DataConstructor):
 
         return target_data_path_folder_detail, target_data_path
 
-    def move_dataset(self, dataset_properties=None):
+    def move_dataset(self):
         """copy all datasets to the target directory
 
         Args:
@@ -85,13 +84,12 @@ class DataConstructorVOC_T1(DataConstructor):
             list: target_data_path_folder_detail
             str:target_data_set
         """
-        if not dataset_properties:
-            dataset_properties = self.dataset_properties
-
-        if dataset_properties['target_data_path'] == dataset_properties['origin_data_path']:
-            return True
+        dataset_properties = self.dataset_properties
 
         target_data_path_folder_detail, target_data_set = self.set_target_position_dir()
+        if dataset_properties['target_data_path'] == dataset_properties['origin_data_path']:
+            return target_data_path_folder_detail, target_data_set
+
         origin_annotation_path = os.path.join(
             dataset_properties['origin_data_path'], 'Annotations')
         origin_image_path = os.path.join(
@@ -111,7 +109,7 @@ class DataConstructorVOC_T1(DataConstructor):
                     copyfile(os.path.join(origin_image_path, img),
                              os.path.join(target_data_path_folder_detail[2], img))
         except Exception as e:
-            logging.error('Moving error', e)
+            logging.error('Moving error')
         logging.info('Completed moving dataset')
         return target_data_path_folder_detail, target_data_set
 
@@ -175,7 +173,7 @@ class DataConstructorVOC_T1(DataConstructor):
         h = h * dh
         return x, y, w, h
 
-    def dataset_constructor(self, dataset_properties=None):
+    def dataset_constructor(self):
         """Main function to construct the dataset structure and files
 
         Args:
@@ -184,18 +182,18 @@ class DataConstructorVOC_T1(DataConstructor):
         Returns:
             boolean
         """
-        if not dataset_properties:
-            dataset_properties = self.dataset_properties
+        dataset_properties = self.dataset_properties
+
+        self.check_origin_data()
+        target_data_path_folder_detail, _ = self.move_dataset()
+
         sets = dataset_properties['target_data_set']
         dataset_path = dataset_properties['target_data_path']
         construction_mode = dataset_properties['construct_mode']
 
-        self.check_origin_data(dataset_properties)
-        target_data_path_folder_detail, _ = self.move_dataset(
-            dataset_properties)
-
         annotation_path = target_data_path_folder_detail[0]
         imagesets_main_path = target_data_path_folder_detail[1]
+        print(dataset_path)
         images_path = target_data_path_folder_detail[2]
         labels_path = target_data_path_folder_detail[3]
 
