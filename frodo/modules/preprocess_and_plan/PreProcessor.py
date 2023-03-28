@@ -5,11 +5,11 @@ from batchgenerators.utilities.file_and_folder_operations import *
 
 
 class PreProcessor(object):
-    """数据+参数加载预处理基类
+    """ Base class for HPO(Hyper Parameter Optimization) and planing
     """
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, fname=None) -> None:
+        return
 
     def load_hypers_from_config(self, hyp_path, hyp_type):
         try:
@@ -20,9 +20,22 @@ class PreProcessor(object):
         setattr(self, hyp_type, hypers)
         return hypers
 
+    def load_hypers_from_config_main(self, model_config_path, fl_config_path, model_config_attr_name='model_config', fl_config_attr_name='fl_config'):
+        self.load_hypers_from_config(model_config_path, model_config_attr_name)
+        self.load_hypers_from_config(fl_config_path, fl_config_attr_name)
+        return [getattr(self, model_config_attr_name), getattr(self, fl_config_attr_name)]
+
+    def pre_process(self):
+        return
+
+    def planning(self):
+        return
+
     def save_plan(self, fname=None):
         if fname:
             self.plan_fname = fname
+        if not os.path.exists(self.preprocess_output_folder):
+            os.makedirs(self.preprocess_output_folder)
         with open(self.plan_fname, 'wb') as f:
             pickle.dump(self.plan, f)
 
@@ -30,15 +43,4 @@ class PreProcessor(object):
         if fname:
             self.plan_fname = fname
         self.plan = load_pickle(self.plan_fname)
-
-
-def main():
-    test1 = PreProcessor()
-    test1.load_hypers_from_config(
-        '/Users/caesaryang/Developer/Frodo/config/hypers/hyp.yolov5.voc.finetune.yaml')
-    test1.plan_fname = '/Users/caesaryang/Developer/Frodo/config/hypers/hypers.pkl'
-    test1.save_plan()
-
-
-if __name__ == "__main__":
-    main()
+        print(self.plan)

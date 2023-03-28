@@ -1,0 +1,6 @@
+fed_algo: fedavg
+cnt: 2
+split: label
+n_clients: 100
+c_ratio: 0.1
+local_epochs: 2
