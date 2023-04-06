@@ -1,3 +1,32 @@
+# hpo configs
+logdir: "/Users/caesaryang/Developer/Frodo/logs"
+seed: 0
+debug: 0
+rounds: 50
+total: 500
+rate: 3
+elim: 0
+eval: 1
+discount: 0.0
+batch: 10
+configs: 1
+lr_only: false
+eps: 0.0
+uniform: false
+random: false
+eta0: 0.0
+sched: "aggressive"
+cutoff: 0.0
+baseline: -1.0
+diff: false
+stop: false
+mle: false
+loss: false
+eval_global: false
+val: 0.2
+num_clients: 50
+
+# fl configs
 fed_algo: fedavg
 cnt: 2
 split: label

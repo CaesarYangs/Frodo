@@ -4,7 +4,7 @@ import yaml
 from batchgenerators.utilities.file_and_folder_operations import *
 
 
-class PreProcessor(object):
+class Planner(object):
     """ Base class for HPO(Hyper Parameter Optimization) and planing
     """
 
@@ -17,11 +17,17 @@ class PreProcessor(object):
                 hypers = yaml.safe_load(f)
         except Exception as e:
             print(e)
-        setattr(self, hyp_type, hypers)
+        # setattr(self, hyp_type, hypers)
         return hypers
 
-    def pre_process(self):
-        return
+    def load_hypers_from_config_main(self, model_config_path=None, fl_config_path=None, model_config_attr_name='model_config', fl_config_attr_name='fl_config'):
+        if model_config_path:
+            return self.load_hypers_from_config(
+                model_config_path, model_config_attr_name), self.load_hypers_from_config(fl_config_path, fl_config_attr_name)
+            # return [getattr(self, model_config_attr_name), getattr(self, fl_config_attr_name)]
+        else:
+            return self.load_hypers_from_config(fl_config_path, fl_config_attr_name)
+            # return [getattr(self, fl_config_attr_name)]
 
     def planning(self):
         return
