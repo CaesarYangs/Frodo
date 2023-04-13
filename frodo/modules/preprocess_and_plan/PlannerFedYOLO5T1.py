@@ -119,6 +119,7 @@ class PlannerFedYOLO5T1(Planner):
 
         print("seeding success")
 
+        fed_hypers_config = {'num_configs': self.num_configs}
         return
 
     def asymmetrical_fed_plan(self):

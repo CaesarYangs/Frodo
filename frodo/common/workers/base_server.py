@@ -1,10 +1,11 @@
 import abc
-from frodo.common.workers import Worker
+from frodo.common.workers.worker import Worker
 
 
 class BaseServer(Worker):
-    def __init__(self, ID, state, config, model, strategy):
-        super(BaseServer, self).__init__(ID, state, config, model, strategy)
+    def __init__(self, ID, state, config, model, strategy, mode, address):
+        super(BaseServer, self).__init__(ID, state,
+                                     config, model, strategy, mode, address)
         self.msg_handlers = dict()
         self.msg_handlers_str = dict()
 

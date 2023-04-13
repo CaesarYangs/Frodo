@@ -1,14 +1,16 @@
 
 class Worker(object):
 
-    def __init__(self, ID=-1, state=0, config=None, model=None, strategy=None):
+    def __init__(self, ID=-1, state=0, config=None, model=None, strategy=None, mode=None, address=None):
         self._ID = ID
         self._state = state
         self._model = model
         self._cfg = config
+        self._mode = mode
+        self._address = address
         self._strategy = strategy
-        if self._cfg is not None:
-            self._mode = self._cfg.federate.mode.lower()
+        # if self._cfg is not None:
+        #     self._mode = self._cfg.federate.mode.lower()
 
     @property
     def ID(self):
@@ -49,3 +51,11 @@ class Worker(object):
     @mode.setter
     def mode(self, value):
         self._mode = value
+
+    @property
+    def address(self):
+        return self._address
+
+    @address.setter
+    def address(self, value):
+        self._address = value
