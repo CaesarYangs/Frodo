@@ -2,6 +2,7 @@ import numpy as np
 import importlib
 import pkgutil
 import os
+import logging
 
 
 def get_classes_info(classes_path):
@@ -23,32 +24,35 @@ def get_classes_info(classes_path):
 def recursive_find_python_class(folder, trainer_name, current_module):
     class_name = None
     modules = os.listdir(folder)
-    for mod_name in modules:
-        mod_name = os.path.splitext(mod_name)[0]
-        if trainer_name == mod_name:
-            m = importlib.import_module(current_module+'.'+mod_name)
-            if hasattr(m, trainer_name):
-                class_name = getattr(m, trainer_name)
-                break
 
-    # for _, modname, ispkg in pkgutil.iter_modules(folder):
-    #     print('====', modname, ispkg)
-    #     if not ispkg:
-    #         m = importlib.import_module(current_module + "." + modname)
-    #         if hasattr(m, trainer_name):
-    #             tr = getattr(m, trainer_name)
-    #             break
+    try:
+        for mod_name in modules:
+            mod_name = os.path.splitext(mod_name)[0]
+            if trainer_name == mod_name:
+                m = importlib.import_module(current_module+'.'+mod_name)
+                if hasattr(m, trainer_name):
+                    class_name = getattr(m, trainer_name)
+                    break
+        return class_name
+    except Exception as e:
+        logging.error(e)
+        return False
 
-    # if tr is None:
-    #     for _, modname, ispkg in pkgutil.iter_modules(folder):
-    #         print("==--:", modname, ispkg)
-    #         if ispkg:
-    #             next_current_module = current_module + "." + modname
-    #             next_folder = os.path.join(folder, modname)
 
-    #             tr = recursive_find_python_class(
-    #                 next_folder, trainer_name, current_module=next_current_module)
-    #         if tr is not None:
-    #             break
+def calculate_time_cost(instance_number,
+                        comm_size,
+                        comp_speed=None,
+                        comm_bandwidth=None,
+                        augmentation_factor=3.0):
+    # Served as an example, this cost model is adapted from FedScale at
+    # https://github.com/SymbioticLab/FedScale/blob/master/fedscale/core/
+    # internal/client.py#L35 (Apache License Version 2.0)
+    # Users can modify this function according to customized cost model
+    if comp_speed is not None and comm_bandwidth is not None:
+        comp_cost = augmentation_factor * instance_number * comp_speed
+        comm_cost = 2.0 * comm_size / comm_bandwidth
+    else:
+        comp_cost = 0
+        comm_cost = 0
 
-    return class_name
+    return comp_cost, comm_cost

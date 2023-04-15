@@ -10,3 +10,4 @@ static/js/lib/
 .idea/
 config/config.json
 data/
+output/
