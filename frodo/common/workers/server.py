@@ -103,8 +103,8 @@ class Server(BaseServer):
 
     def fed_process(self):
         client_id_list = [x+1 for x in range(self.client_nums)]
-        fed_func = self.init_aggregate_method()
-        new_state_model = fed_func(self.local_models)
+        fed_method = self.init_aggregate_method(self.local_models)
+        new_state_model = fed_method.update_global()
         for client in client_id_list:
             self.broadcast_global(client, new_state_model)
         return new_state_model
