@@ -11,3 +11,5 @@ static/js/lib/
 config/config.json
 data/
 output/
+runs/
+*.egg-info
