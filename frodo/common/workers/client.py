@@ -44,5 +44,5 @@ class Client(Worker):
 
     @local_model.setter
     def local_model(self, value):
-        self.local_model = value
+        self._local_model = value
         return self._local_model

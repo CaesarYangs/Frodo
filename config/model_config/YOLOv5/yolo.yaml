@@ -1,0 +1,14 @@
+# yolov5 basic intro
+weights: ""
+cfg: models/new_models/test.yaml
+data: data/helmet1_local.yaml
+hyp: data/hyps/hyp.scratch-low.yaml
+epochs: 100
+batch-size: 16
+imgsz: 320
+resume: False
+device: mps
+optimizer: SGD
+workers: 8
+project: runs/train
+name: exp

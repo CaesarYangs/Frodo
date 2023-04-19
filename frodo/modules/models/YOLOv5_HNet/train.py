@@ -489,12 +489,12 @@ def parse_opt(known=False):
     # parser.add_argument(
     #     '--cfg', type=str, default='models/new_models/modify_yolov5l_xs_cbam_bifpn.yaml', help='model.yaml path')
     parser.add_argument(
-        '--cfg', type=str, default='models/new_models/test.yaml', help='model.yaml path')
+        '--cfg', type=str, default='/Users/caesaryang/Developer/Frodo/frodo/modules/models/YOLOv5_HNet/models/yolov5s.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str,
-                        default='data/helmet1_local.yaml', help='dataset.yaml path')
+                        default='/Users/caesaryang/Developer/Frodo/frodo/modules/models/YOLOv5_HNet/data/frodo_local.yaml', help='dataset.yaml path')
     parser.add_argument(
-        '--hyp', type=str, default='data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=100,
+        '--hyp', type=str, default='/Users/caesaryang/Developer/Frodo/frodo/modules/models/YOLOv5_HNet/data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
+    parser.add_argument('--epochs', type=int, default=3,
                         help='total training epochs')
     parser.add_argument('--batch-size', type=int, default=16,
                         help='total batch size for all GPUs, -1 for autobatch')
@@ -519,7 +519,7 @@ def parse_opt(known=False):
                         const='ram', help='image --cache ram/disk')
     parser.add_argument('--image-weights', action='store_true',
                         help='use weighted image selection for training')
-    parser.add_argument('--device', default='mps',
+    parser.add_argument('--device', default='cpu',
                         help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true',
                         help='vary img-size +/- 50%%')
@@ -531,7 +531,7 @@ def parse_opt(known=False):
                         help='use SyncBatchNorm, only available in DDP mode')
     parser.add_argument('--workers', type=int, default=8,
                         help='max dataloader workers (per RANK in DDP mode)')
-    parser.add_argument('--project', default='runs/train',
+    parser.add_argument('--project', default='/Users/caesaryang/Developer/Frodo/runs/train',
                         help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true',

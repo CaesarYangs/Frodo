@@ -28,11 +28,13 @@ class Server(BaseServer):
         self.resume_epoch = resume_epoch
         self.aggregate_method = aggregate_method
 
+        # set each client's id
+        self.client_ids = [x+1 for x in range(self.client_nums)]
         self.clients = []
         self.local_models = {}
 
         # self.init_aggregate_method()
-        self.init_clients()
+        # self.init_clients()
 
         print("finishing standard server initialize...")
 
@@ -61,13 +63,13 @@ class Server(BaseServer):
     def server_train(self):
         """sever start main training process
         """
-        client_id_list = [x+1 for x in range(self.client_nums)]
+
         local_epochs = self.local_epochs
         local_models = {}
         for epoch in range(self.resume_epoch, self.overall_round+1):
             print("Start Training Communication Round:{}".format(
                 epoch))
-            for client_id in client_id_list:
+            for client_id in self.client_ids:
                 self.clients[client_id-1].client_train()
             self.gather_local()
 
@@ -82,9 +84,8 @@ class Server(BaseServer):
         return
 
     def start_global_val(self):
-        client_id_list = [x+1 for x in range(self.client_nums)]
         print("System Start Val Globaly...")
-        for client_id in client_id_list:
+        for client_id in self.client_ids:
             self.clients[client_id-1].client_val()
         return
 
@@ -92,20 +93,18 @@ class Server(BaseServer):
         return
 
     def gather_local(self, erase=True):
-        client_id_list = [x+1 for x in range(self.client_nums)]
         temp_models = {}
         if erase == True:
             self.local_models = {}
-        for client_id in client_id_list:
+        for client_id in self.client_ids:
             self.local_models[client_id] = copy.deepcopy(
                 self.clients[client_id - 1].local_model)
         return self.local_models
 
     def fed_process(self):
-        client_id_list = [x+1 for x in range(self.client_nums)]
         fed_method = self.init_aggregate_method(self.local_models)
         new_state_model = fed_method.update_global()
-        for client in client_id_list:
+        for client in self.client_ids:
             self.broadcast_global(client, new_state_model)
         return new_state_model
 
