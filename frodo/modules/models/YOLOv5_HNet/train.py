@@ -491,10 +491,10 @@ def parse_opt(known=False):
     parser.add_argument(
         '--cfg', type=str, default='/Users/caesaryang/Developer/Frodo/frodo/modules/models/YOLOv5_HNet/models/yolov5s.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str,
-                        default='/Users/caesaryang/Developer/Frodo/frodo/modules/models/YOLOv5_HNet/data/helmet1_local.yaml', help='dataset.yaml path')
+                        default='/Users/caesaryang/Developer/Frodo/frodo/modules/models/YOLOv5_HNet/data/frodo_local.yaml', help='dataset.yaml path')
     parser.add_argument(
         '--hyp', type=str, default='/Users/caesaryang/Developer/Frodo/frodo/modules/models/YOLOv5_HNet/data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=100,
+    parser.add_argument('--epochs', type=int, default=3,
                         help='total training epochs')
     parser.add_argument('--batch-size', type=int, default=16,
                         help='total batch size for all GPUs, -1 for autobatch')
