@@ -718,6 +718,7 @@ def main(opt, callbacks=Callbacks()):
                     'val/obj_loss', 'val/cls_loss')
             print_mutation(keys, results, hyp.copy(), save_dir, opt.bucket)
 
+
         # Plot results
         plot_evolve(evolve_csv)
         LOGGER.info(f'Hyperparameter evolution finished {opt.evolve} generations\n'

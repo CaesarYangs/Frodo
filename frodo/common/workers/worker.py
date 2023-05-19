@@ -59,3 +59,4 @@ class Worker(object):
     @address.setter
     def address(self, value):
         self._address = value
+

@@ -71,3 +71,4 @@ def main():
                                     args.resume_epoch,
                                     args.aggregate_method)
     train_server.start_fed_training()
+

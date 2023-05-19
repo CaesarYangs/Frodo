@@ -117,6 +117,5 @@ def main():
     server = Server(1, '', '', 0, '0.0.0.0', '')
     server.server_train()
 
-
 if __name__ == '__main__':
     main()
